@@ -1,16 +1,27 @@
 # ruff: noqa: E402
 
-from .core.config_manager import Config
-
-Config.load()
-
+import os
+import psutil
+import logging
 from datetime import datetime
 from logging import Formatter
 
 from pytz import timezone
 
+from .core.config_manager import Config
+
+Config.load()
+
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
+
+
+def log_ram_usage():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()  # in bytes
+    rss_mb = mem_info.rss / (1024 ** 2)  # Resident Set Size in MB
+    vms_mb = mem_info.vms / (1024 ** 2)  # Virtual Memory Size in MB
+    LOGGER.info(f"RAM Usage: RSS={rss_mb:.2f} MB, VMS={vms_mb:.2f} MB")
 
 
 async def main():
@@ -27,6 +38,7 @@ async def main():
     )
 
     await load_settings()
+    log_ram_usage()  # RAM usage after loading settings
 
     def changetz(*args):
         return datetime.now(timezone(Config.TIMEZONE)).timetuple()
@@ -34,18 +46,27 @@ async def main():
     Formatter.converter = changetz
 
     await gather(
-        TgClient.start_bot(), TgClient.start_user(), TgClient.start_helper_bots()
+        TgClient.start_bot(),
+        TgClient.start_user(),
+        TgClient.start_helper_bots(),
     )
+    log_ram_usage()  # RAM usage after starting TgClients
+
     await gather(load_configurations(), update_variables())
+    log_ram_usage()  # RAM usage after loading configurations and variables
 
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
+    log_ram_usage()  # RAM usage after TorrentManager initiation
+
     await gather(
         update_qb_options(),
         update_aria2_options(),
         update_nzb_options(),
     )
+    log_ram_usage()  # RAM usage after updating download options
+
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph
@@ -66,6 +87,15 @@ async def main():
         telegraph.create_account(),
         rclone_serve_booter(),
     )
+    log_ram_usage()  # Final RAM usage after startup completion
+
+    # Schedule periodic RAM logging every 5 minutes (300s)
+    async def periodic_ram_logger(interval=300):
+        while True:
+            log_ram_usage()
+            await asyncio.sleep(interval)
+
+    asyncio.create_task(periodic_ram_logger())
 
 
 bot_loop.run_until_complete(main())
