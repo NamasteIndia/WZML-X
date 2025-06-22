@@ -8,7 +8,6 @@ import tracemalloc
 
 from datetime import datetime
 from logging import Formatter
-
 from pytz import timezone
 
 from .core.config_manager import Config
@@ -28,6 +27,7 @@ def log_ram_usage():
 
 
 async def periodic_ram_logger(interval=300):
+    """Periodically log RAM usage every `interval` seconds."""
     while True:
         log_ram_usage()
         await asyncio.sleep(interval)
@@ -35,7 +35,8 @@ async def periodic_ram_logger(interval=300):
 
 async def periodic_memory_snapshot(interval=600):
     """
-    Periodically log top memory allocation differences using tracemalloc.
+    Periodically capture and log top memory allocation diffs using tracemalloc.
+    This helps detect memory leaks by showing growth in allocated memory blocks.
     """
     tracemalloc.start()
     snapshot1 = tracemalloc.take_snapshot()
@@ -63,7 +64,7 @@ async def main():
     )
 
     await load_settings()
-    log_ram_usage()  # RAM usage after loading settings
+    log_ram_usage()
 
     def changetz(*args):
         return datetime.now(timezone(Config.TIMEZONE)).timetuple()
@@ -75,22 +76,22 @@ async def main():
         TgClient.start_user(),
         TgClient.start_helper_bots(),
     )
-    log_ram_usage()  # RAM usage after starting TgClients
+    log_ram_usage()
 
     await gather(load_configurations(), update_variables())
-    log_ram_usage()  # RAM usage after loading configurations and variables
+    log_ram_usage()
 
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
-    log_ram_usage()  # RAM usage after TorrentManager initiation
+    log_ram_usage()
 
     await gather(
         update_qb_options(),
         update_aria2_options(),
         update_nzb_options(),
     )
-    log_ram_usage()  # RAM usage after updating download options
+    log_ram_usage()
 
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
@@ -112,12 +113,12 @@ async def main():
         telegraph.create_account(),
         rclone_serve_booter(),
     )
-    log_ram_usage()  # Final RAM usage after startup completion
+    log_ram_usage()
 
-    # Schedule periodic RAM logging every 5 minutes (300s)
+    # Start periodic RAM usage logging (every 5 mins)
     asyncio.create_task(periodic_ram_logger())
 
-    # Schedule periodic tracemalloc memory snapshot logging every 10 minutes (600s)
+    # Start periodic tracemalloc memory snapshot logging (every 10 mins)
     asyncio.create_task(periodic_memory_snapshot())
 
 
