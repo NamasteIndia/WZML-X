@@ -3,7 +3,9 @@
 import os
 import psutil
 import logging
-import asyncio 
+import asyncio
+import tracemalloc
+
 from datetime import datetime
 from logging import Formatter
 
@@ -23,6 +25,28 @@ def log_ram_usage():
     rss_mb = mem_info.rss / (1024 ** 2)  # Resident Set Size in MB
     vms_mb = mem_info.vms / (1024 ** 2)  # Virtual Memory Size in MB
     LOGGER.info(f"RAM Usage: RSS={rss_mb:.2f} MB, VMS={vms_mb:.2f} MB")
+
+
+async def periodic_ram_logger(interval=300):
+    while True:
+        log_ram_usage()
+        await asyncio.sleep(interval)
+
+
+async def periodic_memory_snapshot(interval=600):
+    """
+    Periodically log top memory allocation differences using tracemalloc.
+    """
+    tracemalloc.start()
+    snapshot1 = tracemalloc.take_snapshot()
+    while True:
+        await asyncio.sleep(interval)
+        snapshot2 = tracemalloc.take_snapshot()
+        top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+        LOGGER.info("Top 10 memory allocation differences since last snapshot:")
+        for stat in top_stats[:10]:
+            LOGGER.info(stat)
+        snapshot1 = snapshot2
 
 
 async def main():
@@ -91,12 +115,10 @@ async def main():
     log_ram_usage()  # Final RAM usage after startup completion
 
     # Schedule periodic RAM logging every 5 minutes (300s)
-    async def periodic_ram_logger(interval=300):
-        while True:
-            log_ram_usage()
-            await asyncio.sleep(interval)
-
     asyncio.create_task(periodic_ram_logger())
+
+    # Schedule periodic tracemalloc memory snapshot logging every 10 minutes (600s)
+    asyncio.create_task(periodic_memory_snapshot())
 
 
 bot_loop.run_until_complete(main())
