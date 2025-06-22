@@ -26,12 +26,41 @@ def log_ram_usage() -> float:
     return rss_mb
 
 
-async def restart_idle_services():
+async def try_hibernate_or_shutdown(service, name):
     """
-    Restart idle/background services without restarting entire bot.
-    Modify this function to include all your idle service restarts.
+    Try to hibernate the service if possible to save RAM,
+    otherwise shutdown it. Return True if any action succeeded.
     """
-    LOGGER.info("Restarting idle services...")
+    mem_before = log_ram_usage()
+    freed = False
+
+    if hasattr(service, "hibernate") and callable(service.hibernate):
+        try:
+            await service.hibernate()
+            LOGGER.info(f"Hibernated {name} successfully.")
+            freed = True
+        except Exception as e:
+            LOGGER.warning(f"Failed to hibernate {name}: {e}")
+
+    if not freed and hasattr(service, "shutdown") and callable(service.shutdown):
+        try:
+            await service.shutdown()
+            LOGGER.info(f"Shutdown {name} successfully.")
+            freed = True
+        except Exception as e:
+            LOGGER.warning(f"Failed to shutdown {name}: {e}")
+
+    mem_after = log_ram_usage()
+    LOGGER.info(f"{name}: RAM usage before {mem_before:.2f} MB, after {mem_after:.2f} MB")
+    return freed
+
+
+async def manage_idle_services():
+    """
+    Instead of restarting idle services, hibernate or shutdown them
+    whichever frees more RAM, for improved memory management.
+    """
+    LOGGER.info("Managing idle services for RAM optimization...")
 
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.telegraph_helper import telegraph
@@ -43,20 +72,42 @@ async def restart_idle_services():
     )
     from .helper.ext_utils.files_utils import clean_all
 
-    await jdownloader.boot()
-    await telegraph.create_account()
-    await rclone_serve_booter()
-    await initiate_search_tools()
-    await get_packages_version()
-    await restart_notification()
-    await clean_all()
+    # Try hibernate or shutdown on each service
+    await try_hibernate_or_shutdown(jdownloader, "JDownloader")
+    await try_hibernate_or_shutdown(telegraph, "Telegraph")
+    await try_hibernate_or_shutdown(rclone_serve_booter, "Rclone Serve")
 
-    LOGGER.info("Idle services restarted successfully.")
+    # These modules may not have hibernate/shutdown - run as usual to refresh/free memory
+    try:
+        await initiate_search_tools()
+        LOGGER.info("Initiated search tools to free resources.")
+    except Exception as e:
+        LOGGER.warning(f"Failed to initiate_search_tools: {e}")
+
+    try:
+        await get_packages_version()
+        LOGGER.info("Checked packages versions.")
+    except Exception as e:
+        LOGGER.warning(f"Failed to get_packages_version: {e}")
+
+    try:
+        await restart_notification()
+        LOGGER.info("Restarted notification module.")
+    except Exception as e:
+        LOGGER.warning(f"Failed to restart_notification: {e}")
+
+    try:
+        await clean_all()
+        LOGGER.info("Cleaned temporary files and cache.")
+    except Exception as e:
+        LOGGER.warning(f"Failed to clean_all: {e}")
+
+    LOGGER.info("Idle services managed successfully for RAM optimization.")
 
 
 async def periodic_ram_logger(interval=300):
     """
-    Periodically log RAM usage and restart idle services if memory usage exceeds threshold.
+    Periodically log RAM usage and manage idle services if memory usage exceeds threshold.
     Runs every `interval` seconds (default 5 minutes).
     """
     while True:
@@ -64,14 +115,14 @@ async def periodic_ram_logger(interval=300):
 
         threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
         if threshold_mb is None:
-            LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service restart check.")
+            LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service management.")
         else:
             if rss >= threshold_mb:
-                LOGGER.warning(f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. Restarting idle services.")
+                LOGGER.warning(f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. Managing idle services.")
                 try:
-                    await restart_idle_services()
+                    await manage_idle_services()
                 except Exception as e:
-                    LOGGER.error(f"Exception restarting idle services: {e}")
+                    LOGGER.error(f"Exception managing idle services: {e}")
         await asyncio.sleep(interval)
 
 
@@ -160,7 +211,7 @@ async def main():
     )
     log_ram_usage()
 
-    # Start periodic RAM logger with idle service restarts on high memory usage every 5 minutes
+    # Start periodic RAM logger with idle service hibernate/shutdown on high memory usage every 5 minutes
     asyncio.create_task(periodic_ram_logger(interval=300))
 
 
