@@ -62,7 +62,7 @@ async def periodic_ram_logger(interval=300):
     while True:
         rss = log_ram_usage()
 
-        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", None)
+        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
         if threshold_mb is None:
             LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service restart check.")
         else:
