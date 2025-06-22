@@ -54,15 +54,15 @@ async def restart_idle_services():
     LOGGER.info("Idle services restarted successfully.")
 
 
-async def periodic_ram_logger(interval=3600):
+async def periodic_ram_logger(interval=300):
     """
     Periodically log RAM usage and restart idle services if memory usage exceeds threshold.
-    Runs every `interval` seconds (default 1 hour).
+    Runs every `interval` seconds (default 5 minutes).
     """
     while True:
         rss = log_ram_usage()
 
-        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
+        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", None)
         if threshold_mb is None:
             LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service restart check.")
         else:
@@ -160,8 +160,8 @@ async def main():
     )
     log_ram_usage()
 
-    # Start periodic RAM logger with idle service restarts on high memory usage
-    asyncio.create_task(periodic_ram_logger(interval=3600))  # every hour
+    # Start periodic RAM logger with idle service restarts on high memory usage every 5 minutes
+    asyncio.create_task(periodic_ram_logger(interval=300))
 
 
 bot_loop.run_until_complete(main())
