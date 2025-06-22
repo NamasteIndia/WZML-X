@@ -17,7 +17,7 @@ from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
 
 
-def log_ram_usage():
+def log_ram_usage() -> float:
     process = psutil.Process(os.getpid())
     mem_info = process.memory_info()  # in bytes
     rss_mb = mem_info.rss / (1024 ** 2)  # Resident Set Size in MB
@@ -26,29 +26,12 @@ def log_ram_usage():
     return rss_mb
 
 
-async def periodic_ram_logger(interval=300):
-    """Periodically log RAM usage every `interval` seconds."""
-    while True:
-        rss = log_ram_usage()
-        # If RSS is above threshold, trigger idle service restart
-        if rss >= Config.MEMORY_RESTART_THRESHOLD_MB:  # Define this threshold in your config, e.g. 500MB
-            LOGGER.warning(f"RAM usage high ({rss:.2f} MB). Restarting idle services.")
-            try:
-                await restart_idle_services()
-            except Exception as e:
-                LOGGER.error(f"Error restarting idle services: {e}")
-        await asyncio.sleep(interval)
-
-
 async def restart_idle_services():
     """
     Restart idle/background services without restarting entire bot.
-    Modify this function as needed to restart specific services you consider idle.
+    Modify this function to include all your idle service restarts.
     """
     LOGGER.info("Restarting idle services...")
-
-    # Example restart sequence — adapt according to your bot's idle services and their APIs:
-    # You can add or remove services to be restarted here
 
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.telegraph_helper import telegraph
@@ -60,7 +43,6 @@ async def restart_idle_services():
     )
     from .helper.ext_utils.files_utils import clean_all
 
-    # If these services have dedicated restart or reload methods, call them; else call their boot/init
     await jdownloader.boot()
     await telegraph.create_account()
     await rclone_serve_booter()
@@ -72,30 +54,45 @@ async def restart_idle_services():
     LOGGER.info("Idle services restarted successfully.")
 
 
-# --- Begin cache improvements for memory management ---
+async def periodic_ram_logger(interval=3600):
+    """
+    Periodically log RAM usage and restart idle services if memory usage exceeds threshold.
+    Runs every `interval` seconds (default 1 hour).
+    """
+    while True:
+        rss = log_ram_usage()
 
-# Weak caches for Telegram Chat and Message objects
+        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
+        if threshold_mb is None:
+            LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service restart check.")
+        else:
+            if rss >= threshold_mb:
+                LOGGER.warning(f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. Restarting idle services.")
+                try:
+                    await restart_idle_services()
+                except Exception as e:
+                    LOGGER.error(f"Exception restarting idle services: {e}")
+        await asyncio.sleep(interval)
+
+
+# --- Cache improvements for memory management ---
+
 chat_cache = weakref.WeakValueDictionary()
 message_cache = weakref.WeakValueDictionary()
 
 
 def cache_chat(chat):
-    """Cache chat object weakly by its ID."""
     try:
         chat_cache[chat.id] = chat
     except Exception as e:
-        LOGGER.warning(f"Failed to cache chat {getattr(chat, 'id', None)}: {e}")
+        LOGGER.warning(f"Failed to cache chat with id {getattr(chat, 'id', None)}: {e}")
 
 
 def cache_message(message):
-    """Cache message object weakly by its message_id."""
     try:
         message_cache[message.message_id] = message
     except Exception as e:
-        LOGGER.warning(f"Failed to cache message {getattr(message, 'message_id', None)}: {e}")
-
-
-# --- End cache improvements ---
+        LOGGER.warning(f"Failed to cache message with id {getattr(message, 'message_id', None)}: {e}")
 
 
 async def main():
@@ -163,8 +160,8 @@ async def main():
     )
     log_ram_usage()
 
-    # Start periodic RAM usage logging with idle service restarts triggered if memory high
-    asyncio.create_task(periodic_ram_logger(interval=3600))  # check every hour
+    # Start periodic RAM logger with idle service restarts on high memory usage
+    asyncio.create_task(periodic_ram_logger(interval=3600))  # every hour
 
 
 bot_loop.run_until_complete(main())
@@ -189,20 +186,15 @@ from .helper.telegram_helper.message_utils import (
     send_message,
 )
 
-# Example: wrap message/chat caching around message handlers as illustration
-# You must adapt this to your actual message handler setup
-
 from pyrogram import Client
 
 
 @Client.on_message()
 async def message_handler(client, message):
-    # Cache the message and chat object weakly to avoid memory retention
     cache_message(message)
     if message.chat:
         cache_chat(message.chat)
-    # Your existing message processing logic here
-    # ...
+    # existing message processing logic
 
 
 @new_task
