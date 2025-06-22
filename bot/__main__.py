@@ -4,7 +4,7 @@ import os
 import psutil
 import logging
 import asyncio
-import tracemalloc
+import weakref
 
 from datetime import datetime
 from logging import Formatter
@@ -33,22 +33,27 @@ async def periodic_ram_logger(interval=300):
         await asyncio.sleep(interval)
 
 
-async def periodic_memory_snapshot(interval=600):
-    """
-    Periodically capture and log top memory allocation diffs using tracemalloc.
-    This helps detect memory leaks by showing growth in allocated memory blocks.
-    """
-    tracemalloc.start()
-    snapshot1 = tracemalloc.take_snapshot()
-    while True:
-        await asyncio.sleep(interval)
-        snapshot2 = tracemalloc.take_snapshot()
-        top_stats = snapshot2.compare_to(snapshot1, 'lineno')
-        LOGGER.info("Top 10 memory allocation differences since last snapshot:")
-        for stat in top_stats[:10]:
-            LOGGER.info(stat)
-        snapshot1 = snapshot2
+# --- Begin cache improvements for memory management ---
 
+# Weak caches for Telegram Chat and Message objects
+chat_cache = weakref.WeakValueDictionary()
+message_cache = weakref.WeakValueDictionary()
+
+def cache_chat(chat):
+    """Cache chat object weakly by its ID."""
+    try:
+        chat_cache[chat.id] = chat
+    except Exception as e:
+        LOGGER.warning(f"Failed to cache chat {getattr(chat, 'id', None)}: {e}")
+
+def cache_message(message):
+    """Cache message object weakly by its message_id."""
+    try:
+        message_cache[message.message_id] = message
+    except Exception as e:
+        LOGGER.warning(f"Failed to cache message {getattr(message, 'message_id', None)}: {e}")
+
+# --- End cache improvements ---
 
 async def main():
     from asyncio import gather
@@ -118,8 +123,7 @@ async def main():
     # Start periodic RAM usage logging (every 5 mins)
     asyncio.create_task(periodic_ram_logger())
 
-    # Start periodic tracemalloc memory snapshot logging (every 10 mins)
-    asyncio.create_task(periodic_memory_snapshot())
+    # Note: periodic_memory_snapshot and other debug functions removed as requested
 
 
 bot_loop.run_until_complete(main())
@@ -143,6 +147,20 @@ from .helper.telegram_helper.message_utils import (
     edit_message,
     send_message,
 )
+
+# Example: wrap message/chat caching around message handlers as illustration
+# You must adapt this to your actual message handler setup
+
+from pyrogram import Client
+
+@Client.on_message()
+async def message_handler(client, message):
+    # Cache the message and chat object weakly to avoid memory retention
+    cache_message(message)
+    if message.chat:
+        cache_chat(message.chat)
+    # Your existing message processing logic here
+    # ...
 
 
 @new_task
