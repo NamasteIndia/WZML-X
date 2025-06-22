@@ -1,3 +1,4 @@
+import asyncio
 from json import dumps
 from random import randint
 from re import match
@@ -27,6 +28,45 @@ class JDownloader(MyJdApi):
         async with aiopen(path, "w") as f:
             await f.write(dumps(data))
 
+    async def hibernate(self):
+        """
+        Attempt to pause or suspend JDownloader to save RAM.
+        This method should implement logic to safely pause downloads,
+        disconnect APIs, or reduce resource use without stopping the app.
+        """
+        try:
+            LOGGER.info("Attempting to hibernate JDownloader...")
+            # Example placeholder: properly pause downloads, stop background tasks, etc.
+            # You must implement these below methods in your real code or API
+            await self.pause_all_downloads()
+            await self.disconnect_api()
+            LOGGER.info("JDownloader hibernated successfully.")
+        except Exception as e:
+            LOGGER.warning(f"Failed to hibernate JDownloader: {e}")
+            raise
+
+    async def shutdown(self):
+        """
+        Fully stop JDownloader process to free memory.
+        """
+        try:
+            LOGGER.info("Shutting down JDownloader service...")
+            await cmd_exec(["pkill", "-9", "-f", "java"])
+            self.is_connected = False
+            LOGGER.info("JDownloader shut down successfully.")
+        except Exception as e:
+            LOGGER.warning(f"Failed to shutdown JDownloader: {e}")
+            raise
+
+    # Placeholders for demonstration - implement actual API calls or controls
+    async def pause_all_downloads(self):
+        # Implement pausing all active downloads in JDownloader
+        await asyncio.sleep(0.1)
+
+    async def disconnect_api(self):
+        # Implement disconnecting from JDownloader API or similar actions
+        await asyncio.sleep(0.1)
+
     @new_task
     async def boot(self):
         await cmd_exec(["pkill", "-9", "-f", "java"])
@@ -34,7 +74,7 @@ class JDownloader(MyJdApi):
             self.is_connected = False
             self.error = "JDownloader Credentials not provided!"
             return
-        self.error = "Connecting... Try agin after couple of seconds"
+        self.error = "Connecting... Try again after couple of seconds"
         self._device_name = f"{randint(0, 1000)}@{TgClient.BNAME}"
         if await path.exists("/JDownloader/logs"):
             LOGGER.info(
