@@ -105,7 +105,7 @@ async def manage_idle_services():
     LOGGER.info("Idle services managed successfully for RAM optimization.")
 
 
-async def periodic_ram_logger(interval: int = 300):
+async def periodic_ram_logger(interval=300):
     """
     Periodically log RAM usage and manage idle services if memory usage exceeds threshold.
     Runs every `interval` seconds (default 5 minutes).
@@ -113,16 +113,12 @@ async def periodic_ram_logger(interval: int = 300):
     while True:
         rss = log_ram_usage()
 
-        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", None)
+        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
         if threshold_mb is None:
-            LOGGER.error(
-                "Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service management."
-            )
+            LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service management.")
         else:
             if rss >= threshold_mb:
-                LOGGER.warning(
-                    f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. Managing idle services."
-                )
+                LOGGER.warning(f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. Managing idle services.")
                 try:
                     await manage_idle_services()
                 except Exception as e:
@@ -138,20 +134,16 @@ message_cache = weakref.WeakValueDictionary()
 
 def cache_chat(chat):
     try:
-        if chat is not None and hasattr(chat, "id"):
-            chat_cache[chat.id] = chat
+        chat_cache[chat.id] = chat
     except Exception as e:
         LOGGER.warning(f"Failed to cache chat with id {getattr(chat, 'id', None)}: {e}")
 
 
 def cache_message(message):
     try:
-        if message is not None and hasattr(message, "message_id"):
-            message_cache[message.message_id] = message
+        message_cache[message.message_id] = message
     except Exception as e:
-        LOGGER.warning(
-            f"Failed to cache message with id {getattr(message, 'message_id', None)}: {e}"
-        )
+        LOGGER.warning(f"Failed to cache message with id {getattr(message, 'message_id', None)}: {e}")
 
 
 async def main():
@@ -171,11 +163,7 @@ async def main():
     log_ram_usage()
 
     def changetz(*args):
-        try:
-            return datetime.now(timezone(Config.TIMEZONE)).timetuple()
-        except Exception as e:
-            LOGGER.error(f"Failed to convert timezone: {e}")
-            return datetime.utcnow().timetuple()
+        return datetime.now(timezone(Config.TIMEZONE)).timetuple()
 
     Formatter.converter = changetz
 
@@ -264,7 +252,7 @@ async def message_handler(client, message):
 async def restart_sessions_confirm(_, query):
     data = query.data.split()
     message = query.message
-    if len(data) > 1 and data[1] == "confirm":
+    if data[1] == "confirm":
         reply_to = message.reply_to_message
         restart_message = await send_message(reply_to, "Restarting Session(s)...")
         await delete_message(message)
