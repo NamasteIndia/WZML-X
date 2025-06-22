@@ -1,4 +1,3 @@
-import asyncio
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath
 from asyncio import create_subprocess_exec
@@ -59,30 +58,3 @@ async def rclone_serve_booter():
         cmd.extend(("--user", user, "--pass", pswd))
     rcs = await create_subprocess_exec(*cmd)
     RcloneServe.append(rcs)
-
-
-class RcloneServeBooter:
-    async def hibernate(self):
-        LOGGER.info("Rclone Serve: Pausing server...")
-        await self.pause_server()
-
-    async def shutdown(self):
-        LOGGER.info("Rclone Serve: Stopping server...")
-        await self.stop_server()
-
-    async def pause_server(self):
-        # Implement real pause logic here if possible
-        # For now just sleep simulating suspend
-        await asyncio.sleep(0.1)
-
-    async def stop_server(self):
-        try:
-            if RcloneServe:
-                proc = RcloneServe[0]
-                proc.kill()
-                await proc.wait()
-                RcloneServe.clear()
-                LOGGER.info("Rclone Serve stopped successfully.")
-        except Exception as e:
-            LOGGER.warning(f"Failed to stop Rclone Serve: {e}")
-        await asyncio.sleep(0.1)
