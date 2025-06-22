@@ -1,16 +1,98 @@
 # ruff: noqa: E402
 
+import os
+import psutil
+import asyncio
+import weakref
+
+from datetime import datetime
+from logging import Formatter
+from pytz import timezone
+
 from .core.config_manager import Config
 
 Config.load()
 
-from datetime import datetime
-from logging import Formatter
-
-from pytz import timezone
-
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
+
+
+def log_ram_usage() -> float:
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()  # in bytes
+    rss_mb = mem_info.rss / (1024 ** 2)  # Resident Set Size in MB
+    vms_mb = mem_info.vms / (1024 ** 2)  # Virtual Memory Size in MB
+    LOGGER.info(f"RAM Usage: RSS={rss_mb:.2f} MB, VMS={vms_mb:.2f} MB")
+    return rss_mb
+
+
+async def restart_idle_services():
+    """
+    Restart idle/background services without restarting entire bot.
+    Modify this function to include all your idle service restarts.
+    """
+    LOGGER.info("Restarting idle services...")
+
+    from .core.jdownloader_booter import jdownloader
+    from .helper.ext_utils.telegraph_helper import telegraph
+    from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
+    from .modules import (
+        initiate_search_tools,
+        get_packages_version,
+        restart_notification,
+    )
+    from .helper.ext_utils.files_utils import clean_all
+
+    await jdownloader.boot()
+    await telegraph.create_account()
+    await rclone_serve_booter()
+    await initiate_search_tools()
+    await get_packages_version()
+    await restart_notification()
+    await clean_all()
+
+    LOGGER.info("Idle services restarted successfully.")
+
+
+async def periodic_ram_logger(interval=3600):
+    """
+    Periodically log RAM usage and restart idle services if memory usage exceeds threshold.
+    Runs every `interval` seconds (default 1 hour).
+    """
+    while True:
+        rss = log_ram_usage()
+
+        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
+        if threshold_mb is None:
+            LOGGER.error("Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service restart check.")
+        else:
+            if rss >= threshold_mb:
+                LOGGER.warning(f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. Restarting idle services.")
+                try:
+                    await restart_idle_services()
+                except Exception as e:
+                    LOGGER.error(f"Exception restarting idle services: {e}")
+        await asyncio.sleep(interval)
+
+
+# --- Cache improvements for memory management ---
+
+chat_cache = weakref.WeakValueDictionary()
+message_cache = weakref.WeakValueDictionary()
+
+
+def cache_chat(chat):
+    try:
+        chat_cache[chat.id] = chat
+    except Exception as e:
+        LOGGER.warning(f"Failed to cache chat with id {getattr(chat, 'id', None)}: {e}")
+
+
+def cache_message(message):
+    try:
+        message_cache[message.message_id] = message
+    except Exception as e:
+        LOGGER.warning(f"Failed to cache message with id {getattr(message, 'message_id', None)}: {e}")
 
 
 async def main():
@@ -27,6 +109,7 @@ async def main():
     )
 
     await load_settings()
+    log_ram_usage()
 
     def changetz(*args):
         return datetime.now(timezone(Config.TIMEZONE)).timetuple()
@@ -34,18 +117,27 @@ async def main():
     Formatter.converter = changetz
 
     await gather(
-        TgClient.start_bot(), TgClient.start_user(), TgClient.start_helper_bots()
+        TgClient.start_bot(),
+        TgClient.start_user(),
+        TgClient.start_helper_bots(),
     )
+    log_ram_usage()
+
     await gather(load_configurations(), update_variables())
+    log_ram_usage()
 
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
+    log_ram_usage()
+
     await gather(
         update_qb_options(),
         update_aria2_options(),
         update_nzb_options(),
     )
+    log_ram_usage()
+
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph
@@ -66,6 +158,10 @@ async def main():
         telegraph.create_account(),
         rclone_serve_booter(),
     )
+    log_ram_usage()
+
+    # Start periodic RAM logger with idle service restarts on high memory usage
+    asyncio.create_task(periodic_ram_logger(interval=3600))  # every hour
 
 
 bot_loop.run_until_complete(main())
@@ -89,6 +185,16 @@ from .helper.telegram_helper.message_utils import (
     edit_message,
     send_message,
 )
+
+from pyrogram import Client
+
+
+@Client.on_message()
+async def message_handler(client, message):
+    cache_message(message)
+    if message.chat:
+        cache_chat(message.chat)
+    # existing message processing logic
 
 
 @new_task
