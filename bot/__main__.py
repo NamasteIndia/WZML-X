@@ -11,11 +11,34 @@ from pytz import timezone
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
 
+import asyncio
+import psutil
+
 # Example config flags. Replace with your actual config management.
 ENABLE_JDOWNLOADER = getattr(Config, "ENABLE_JDOWNLOADER", False)
 ENABLE_RCLONE = getattr(Config, "ENABLE_RCLONE", True)
 ENABLE_TELEGRAPH = getattr(Config, "ENABLE_TELEGRAPH", True)
 ENABLE_HELPER_BOTS = getattr(Config, "ENABLE_HELPER_BOTS", True)
+
+MAX_RAM_USAGE = 400 * 1024 * 1024  # 400 MB
+CHECK_INTERVAL = 60  # check every 60 seconds
+EXCLUDE_PROCESSES = ['python', 'python3', 'aria2c', 'qbittorrent-nox', 'rclone']  # Add your known essential processes here
+
+
+async def kill_high_ram_processes():
+    while True:
+        for proc in psutil.process_iter(['pid', 'name', 'memory_info']):
+            try:
+                if proc.info['name'] in EXCLUDE_PROCESSES:
+                    continue
+                mem_usage = proc.info['memory_info'].rss
+                if mem_usage >= MAX_RAM_USAGE:
+                    LOGGER.warning(f"Killing {proc.info['name']} (PID: {proc.info['pid']}) - RAM: {mem_usage / (1024 * 1024):.2f} MB")
+                    proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        await asyncio.sleep(CHECK_INTERVAL)
+
 
 async def main():
     from asyncio import gather
@@ -75,6 +98,7 @@ async def main():
         initiate_search_tools(),
         get_packages_version(),
         restart_notification(),
+        kill_high_ram_processes(),  # ✅ RAM monitor task added here
     ])
 
     if ENABLE_TELEGRAPH:
@@ -87,11 +111,9 @@ async def main():
 
     await gather(*tasks)
 
-    # Resource cleanup: add code here to free up objects if needed
-    # import gc; gc.collect()
-
 
 bot_loop.run_until_complete(main())
+
 
 # Lazy import handlers and UI setup
 def setup_handlers():
@@ -102,6 +124,7 @@ def setup_handlers():
     add_aria2_callbacks()
     create_help_buttons()
     add_handlers()
+
 
 setup_handlers()
 
@@ -116,6 +139,7 @@ from .helper.telegram_helper.message_utils import (
     edit_message,
     send_message,
 )
+
 
 @new_task
 async def restart_sessions_confirm(_, query):
@@ -136,6 +160,7 @@ async def restart_sessions_confirm(_, query):
         await edit_message(restart_message, "Session(s) Restarted Successfully!")
     else:
         await delete_message(message)
+
 
 TgClient.bot.add_handler(
     CallbackQueryHandler(
