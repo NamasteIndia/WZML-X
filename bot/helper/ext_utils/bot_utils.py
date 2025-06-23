@@ -44,22 +44,6 @@ class SetInterval:
 def _build_command_usage(help_dict, command_key):
     buttons = ButtonMaker()
     cmd_list = list(help_dict.keys())[1:]
-    temp_store = []
-    cmd_pages = [cmd_list[i : i + 10] for i in range(0, len(cmd_list), 10)]
-    for i in range(1, len(cmd_pages) + 1):
-        for name in cmd_pages[i]:
-            buttons.data_button(name, f"help {command_key} {name}")
-        buttons.data_button("Prev", f"help pre {command_key} {i - 1}")
-        buttons.data_button("Next", f"help nex {command_key} {i + 1}")
-        buttons.data_button("Close", "help close", "footer")
-        temp_store.append(buttons.build_menu(2))
-    COMMAND_USAGE[command_key] = [help_dict["main"], *temp_store]
-    buttons.reset()
-
-
-def _build_command_usage(help_dict, command_key):
-    buttons = ButtonMaker()
-    cmd_list = list(help_dict.keys())[1:]
     cmd_pages = [cmd_list[i : i + 10] for i in range(0, len(cmd_list), 10)]
     temp_store = []
 
@@ -85,16 +69,24 @@ def create_help_buttons():
 
 
 def compare_versions(v1, v2):
-    v1, v2 = (list(map(int, v.split("-")[0][1:].split("."))) for v in (v1, v2))
-    return (
-        "New Version Update is Available! Check Now!"
-        if v1 < v2
-        else (
-            "More Updated! Kindly Contribute in Official"
-            if v1 > v2
-            else "Already up to date with latest version"
-        )
-    )
+    try:
+        v1_nums = list(map(int, v1.split("-")[0][1:].split(".")))
+    except (IndexError, ValueError):
+        v1_nums = []
+    try:
+        v2_nums = list(map(int, v2.split("-")[0][1:].split(".")))
+    except (IndexError, ValueError):
+        v2_nums = []
+
+    if not v1_nums or not v2_nums:
+        return "Unable to compare versions"
+
+    if v1_nums < v2_nums:
+        return "New Version Update is Available! Check Now!"
+    elif v1_nums > v2_nums:
+        return "More Updated! Kindly Contribute in Official"
+    else:
+        return "Already up to date with latest version"
 
 
 def bt_selection_buttons(id_):
