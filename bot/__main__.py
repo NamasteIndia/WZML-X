@@ -17,13 +17,36 @@ from .core.tg_client import TgClient
 # Import JDownloader instance from jdownloader_booter.py
 from .core.jdownloader_booter import jdownloader
 
+
+def get_total_rss_mb() -> float:
+    """
+    Calculate total RSS memory in MB for current process and all its children.
+    This provides a more accurate measure of actual RAM used by the entire process tree,
+    closer to what Heroku reports as dyno memory usage.
+    """
+    try:
+        rss = 0
+        proc = psutil.Process(os.getpid())
+        rss += proc.memory_info().rss
+        # Safely sum memory of all child processes recursively
+        for child in proc.children(recursive=True):
+            try:
+                rss += child.memory_info().rss
+            except Exception:
+                pass
+        return rss / (1024 ** 2)
+    except Exception as e:
+        LOGGER.error(f"Failed to get total RSS memory: {e}")
+        return 0.0
+
+
 def log_ram_usage() -> float:
+    total_rss_mb = get_total_rss_mb()
+    # For informational purposes you can get VMS of main process as before
     process = psutil.Process(os.getpid())
-    mem_info = process.memory_info()  # in bytes
-    rss_mb = mem_info.rss / (1024 ** 2)  # Resident Set Size in MB
-    vms_mb = mem_info.vms / (1024 ** 2)  # Virtual Memory Size in MB
-    LOGGER.info(f"RAM Usage: RSS={rss_mb:.2f} MB, VMS={vms_mb:.2f} MB")
-    return rss_mb
+    vms_mb = process.memory_info().vms / (1024 ** 2)  # Virtual Memory Size in MB
+    LOGGER.info(f"RAM Usage: Total RSS={total_rss_mb:.2f} MB, Main Process VMS={vms_mb:.2f} MB")
+    return total_rss_mb
 
 
 async def hibernate_or_shutdown_service(service, name: str):
