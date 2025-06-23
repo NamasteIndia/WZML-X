@@ -1,62 +1,16 @@
 # ruff: noqa: E402
 
-import os
-import psutil
-from logging import Formatter
-from datetime import datetime
-from pytz import timezone
-
 from .core.config_manager import Config
 
 Config.load()
 
+from datetime import datetime
+from logging import Formatter
+
+from pytz import timezone
+
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
-
-
-def get_total_rss_mb() -> float:
-    """
-    Calculate total RSS memory in MB for current process and all its children.
-    This provides a more accurate measure of actual RAM used by the entire process tree,
-    closer to what Heroku reports as dyno memory usage.
-    """
-    try:
-        rss = 0
-        proc = psutil.Process(os.getpid())
-        rss += proc.memory_info().rss
-        # Safely sum memory of all child processes recursively
-        for child in proc.children(recursive=True):
-            try:
-                rss += child.memory_info().rss
-            except Exception:
-                pass
-        return rss / (1024 ** 2)
-    except Exception as e:
-        LOGGER.error(f"Failed to get total RSS memory: {e}")
-        return 0.0
-
-
-def log_process_tree_memory():
-    proc = psutil.Process(os.getpid())
-    LOGGER.info(
-        f"Main PID: {proc.pid}, RSS: {proc.memory_info().rss / (1024**2):.2f} MB, CMD: {' '.join(proc.cmdline())}"
-    )
-    for child in proc.children(recursive=True):
-        try:
-            mem = child.memory_info().rss / (1024 ** 2)
-            cmdline = " ".join(child.cmdline())
-            LOGGER.info(f"Child PID: {child.pid}, RSS: {mem:.2f} MB, CMD: {cmdline}")
-        except Exception:
-            continue
-
-
-def log_ram_usage() -> float:
-    total_rss_mb = get_total_rss_mb()
-    process = psutil.Process(os.getpid())
-    vms_mb = process.memory_info().vms / (1024 ** 2)  # Virtual Memory Size in MB
-    LOGGER.info(f"RAM Usage: Total RSS={total_rss_mb:.2f} MB, Main Process VMS={vms_mb:.2f} MB")
-    log_process_tree_memory()
-    return total_rss_mb
 
 
 async def main():
@@ -82,7 +36,6 @@ async def main():
     await gather(
         TgClient.start_bot(), TgClient.start_user(), TgClient.start_helper_bots()
     )
-
     await gather(load_configurations(), update_variables())
 
     from .core.torrent_manager import TorrentManager
@@ -93,7 +46,6 @@ async def main():
         update_aria2_options(),
         update_nzb_options(),
     )
-
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph
@@ -114,9 +66,6 @@ async def main():
         telegraph.create_account(),
         rclone_serve_booter(),
     )
-
-    # Log memory usage at startup and after initializations to help track usage
-    log_ram_usage()
 
 
 bot_loop.run_until_complete(main())
