@@ -12,7 +12,7 @@ from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
 
 # Example config flags. Replace with your actual config management.
-ENABLE_JDOWNLOADER = getattr(Config, "ENABLE_JDOWNLOADER", True)
+ENABLE_JDOWNLOADER = getattr(Config, "ENABLE_JDOWNLOADER", False)
 ENABLE_RCLONE = getattr(Config, "ENABLE_RCLONE", True)
 ENABLE_TELEGRAPH = getattr(Config, "ENABLE_TELEGRAPH", True)
 ENABLE_HELPER_BOTS = getattr(Config, "ENABLE_HELPER_BOTS", True)
