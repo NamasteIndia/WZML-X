@@ -12,31 +12,16 @@ from .help import arg_usage, bot_help
 from .mediainfo import mediainfo
 from .speedtest import speedtest
 from .broadcast import broadcast
-# HEAVY RAM USAGE: LAZY IMPORTS BELOW
-def mirror(*args, **kwargs):
-    from .mirror_leech import mirror as _mirror
-    return _mirror(*args, **kwargs)
-def leech(*args, **kwargs):
-    from .mirror_leech import leech as _leech
-    return _leech(*args, **kwargs)
-def qb_leech(*args, **kwargs):
-    from .mirror_leech import qb_leech as _qb_leech
-    return _qb_leech(*args, **kwargs)
-def qb_mirror(*args, **kwargs):
-    from .mirror_leech import qb_mirror as _qb_mirror
-    return _qb_mirror(*args, **kwargs)
-def jd_leech(*args, **kwargs):
-    from .mirror_leech import jd_leech as _jd_leech
-    return _jd_leech(*args, **kwargs)
-def jd_mirror(*args, **kwargs):
-    from .mirror_leech import jd_mirror as _jd_mirror
-    return _jd_mirror(*args, **kwargs)
-def nzb_leech(*args, **kwargs):
-    from .mirror_leech import nzb_leech as _nzb_leech
-    return _nzb_leech(*args, **kwargs)
-def nzb_mirror(*args, **kwargs):
-    from .mirror_leech import nzb_mirror as _nzb_mirror
-    return _nzb_mirror(*args, **kwargs)
+from .mirror_leech import (
+    mirror,
+    leech,
+    qb_leech,
+    qb_mirror,
+    jd_leech,
+    jd_mirror,
+    nzb_leech,
+    nzb_mirror,
+)
 from .restart import (
     restart_bot,
     restart_notification,
@@ -44,7 +29,7 @@ from .restart import (
     restart_sessions,
 )
 from .imdb import imdb_search, imdb_callback
-# from .rss import get_rss_menu, rss_listener   # Disabled to save RAM
+from .rss import get_rss_menu, rss_listener
 from .search import torrent_search, torrent_search_update, initiate_search_tools
 from .nzb_search import hydra_search
 from .services import start, start_cb, login, ping, log, log_cb
@@ -68,7 +53,7 @@ __all__ = [
     "clone_node",
     "aioexecute",
     "execute",
-    # "hydra_search",
+    "hydra_search",
     "clear",
     "select",
     "confirm_selection",
@@ -78,29 +63,28 @@ __all__ = [
     "gdrive_search",
     "select_type",
     "arg_usage",
-    # HEAVY (LAZY) IMPORTS
     "mirror",
     "leech",
     "qb_leech",
     "qb_mirror",
-    # "jd_leech",
-    # "jd_mirror",
-    # "nzb_leech",
-    # "nzb_mirror",
+    "jd_leech",
+    "jd_mirror",
+    "nzb_leech",
+    "nzb_mirror",
     "restart_bot",
     "restart_notification",
     "confirm_restart",
     "restart_sessions",
-    # "imdb_search",
-    # "imdb_callback",
-    # "get_rss_menu",      # Disabled to save RAM
-    # "rss_listener",      # Disabled to save RAM
-    # "torrent_search",
-    # "torrent_search_update",
-    # "initiate_search_tools",
+    "imdb_search",
+    "imdb_callback",
+    "get_rss_menu",
+    "rss_listener",
+    "torrent_search",
+    "torrent_search_update",
+    "initiate_search_tools",
     "start",
     "start_cb",
-    # "login",
+    "login",
     "bot_help",
     "mediainfo",
     "speedtest",
