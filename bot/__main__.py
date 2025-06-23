@@ -6,12 +6,16 @@ Config.load()
 
 from datetime import datetime
 from logging import Formatter
-
 from pytz import timezone
 
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
 
+# Example config flags. Replace with your actual config management.
+ENABLE_JDOWNLOADER = getattr(Config, "ENABLE_JDOWNLOADER", True)
+ENABLE_RCLONE = getattr(Config, "ENABLE_RCLONE", True)
+ENABLE_TELEGRAPH = getattr(Config, "ENABLE_TELEGRAPH", True)
+ENABLE_HELPER_BOTS = getattr(Config, "ENABLE_HELPER_BOTS", True)
 
 async def main():
     from asyncio import gather
@@ -33,50 +37,73 @@ async def main():
 
     Formatter.converter = changetz
 
-    await gather(
-        TgClient.start_bot(), TgClient.start_user(), TgClient.start_helper_bots()
-    )
+    # Lazy start helper bots only if enabled.
+    tg_start_tasks = [TgClient.start_bot(), TgClient.start_user()]
+    if ENABLE_HELPER_BOTS:
+        tg_start_tasks.append(TgClient.start_helper_bots())
+    await gather(*tg_start_tasks)
+
     await gather(load_configurations(), update_variables())
 
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
+
     await gather(
         update_qb_options(),
         update_aria2_options(),
         update_nzb_options(),
     )
-    from .core.jdownloader_booter import jdownloader
+
+    # Lazy imports and conditional starts for heavy services.
+    tasks = [save_settings()]
+
+    if ENABLE_JDOWNLOADER:
+        from .core.jdownloader_booter import jdownloader
+        tasks.append(jdownloader.boot())
+
+    # Clean files only if needed (you may want to make this conditional/configurable)
     from .helper.ext_utils.files_utils import clean_all
-    from .helper.ext_utils.telegraph_helper import telegraph
-    from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
+    tasks.append(clean_all())
+
     from .modules import (
         get_packages_version,
         initiate_search_tools,
         restart_notification,
     )
-
-    await gather(
-        save_settings(),
-        jdownloader.boot(),
-        clean_all(),
+    tasks.extend([
         initiate_search_tools(),
         get_packages_version(),
         restart_notification(),
-        telegraph.create_account(),
-        rclone_serve_booter(),
-    )
+    ])
+
+    if ENABLE_TELEGRAPH:
+        from .helper.ext_utils.telegraph_helper import telegraph
+        tasks.append(telegraph.create_account())
+
+    if ENABLE_RCLONE:
+        from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
+        tasks.append(rclone_serve_booter())
+
+    await gather(*tasks)
+
+    # Resource cleanup: add code here to free up objects if needed
+    # import gc; gc.collect()
 
 
 bot_loop.run_until_complete(main())
 
-from .core.handlers import add_handlers
-from .helper.ext_utils.bot_utils import create_help_buttons
-from .helper.listeners.aria2_listener import add_aria2_callbacks
+# Lazy import handlers and UI setup
+def setup_handlers():
+    from .core.handlers import add_handlers
+    from .helper.ext_utils.bot_utils import create_help_buttons
+    from .helper.listeners.aria2_listener import add_aria2_callbacks
 
-add_aria2_callbacks()
-create_help_buttons()
-add_handlers()
+    add_aria2_callbacks()
+    create_help_buttons()
+    add_handlers()
+
+setup_handlers()
 
 from pyrogram.filters import regex
 from pyrogram.handlers import CallbackQueryHandler
@@ -89,7 +116,6 @@ from .helper.telegram_helper.message_utils import (
     edit_message,
     send_message,
 )
-
 
 @new_task
 async def restart_sessions_confirm(_, query):
@@ -110,7 +136,6 @@ async def restart_sessions_confirm(_, query):
         await edit_message(restart_message, "Session(s) Restarted Successfully!")
     else:
         await delete_message(message)
-
 
 TgClient.bot.add_handler(
     CallbackQueryHandler(
