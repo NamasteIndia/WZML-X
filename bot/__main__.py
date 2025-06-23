@@ -1,5 +1,3 @@
-# ruff: noqa: E402
-
 import os
 import psutil
 import asyncio
@@ -16,6 +14,8 @@ Config.load()
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
 
+# Import JDownloader instance from jdownloader_booter.py
+from .core.jdownloader_booter import jdownloader
 
 def log_ram_usage() -> float:
     process = psutil.Process(os.getpid())
@@ -56,11 +56,9 @@ async def hibernate_or_shutdown_service(service, name: str):
 async def hibernate_idle_services():
     """
     Hibernate or shutdown idle/background services without restarting the entire bot.
-    Modify this function to include all your idle services.
     """
     LOGGER.info("Hibernating idle services...")
 
-    from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.telegraph_helper import telegraph
     from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
     from .modules import (
@@ -70,13 +68,14 @@ async def hibernate_idle_services():
     )
     from .helper.ext_utils.files_utils import clean_all
 
-    # Hibernate or shutdown these services to save RAM
+    # Hibernate or shutdown the JDownloader instance imported above
     await hibernate_or_shutdown_service(jdownloader, "JDownloader")
+
+    # Hibernate or shutdown other known services
     await hibernate_or_shutdown_service(telegraph, "Telegraph")
     await hibernate_or_shutdown_service(rclone_serve_booter, "Rclone Serve")
 
-    # These are normal tasks—just run them (if you want add hibernate support,
-    # add appropriate methods in those modules)
+    # These are regular async calls; add explicit hibernate if supported in those modules
     await initiate_search_tools()
     await get_packages_version()
     await restart_notification()
@@ -85,10 +84,10 @@ async def hibernate_idle_services():
     LOGGER.info("Idle services hibernated/shut down successfully.")
 
 
-async def periodic_ram_logger(interval: int = 3600):
+async def periodic_ram_logger(interval: int = 300):
     """
     Periodically log RAM usage and hibernate idle services if memory usage exceeds threshold.
-    Runs every `interval` seconds (default 1 hour).
+    Runs every `interval` seconds (default 300 seconds = 5 minutes).
     """
     while True:
         rss = log_ram_usage()
@@ -174,7 +173,6 @@ async def main():
     )
     log_ram_usage()
 
-    from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph
     from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
@@ -196,8 +194,8 @@ async def main():
     )
     log_ram_usage()
 
-    # Start periodic RAM logger with idle service hibernation on high memory usage
-    asyncio.create_task(periodic_ram_logger(interval=3600))  # every hour
+    # Start periodic RAM logger with idle service hibernation every 5 minutes
+    asyncio.create_task(periodic_ram_logger(interval=300))  # 300 seconds = 5 minutes
 
 
 bot_loop.run_until_complete(main())
