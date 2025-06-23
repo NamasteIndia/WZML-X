@@ -1,10 +1,9 @@
+# ruff: noqa: E402
+
 import os
 import psutil
-import asyncio
-import weakref
-
-from datetime import datetime
 from logging import Formatter
+from datetime import datetime
 from pytz import timezone
 
 from .core.config_manager import Config
@@ -13,9 +12,6 @@ Config.load()
 
 from . import LOGGER, bot_loop
 from .core.tg_client import TgClient
-
-# Import JDownloader instance from jdownloader_booter.py
-from .core.jdownloader_booter import jdownloader
 
 
 def get_total_rss_mb() -> float:
@@ -40,117 +36,27 @@ def get_total_rss_mb() -> float:
         return 0.0
 
 
+def log_process_tree_memory():
+    proc = psutil.Process(os.getpid())
+    LOGGER.info(
+        f"Main PID: {proc.pid}, RSS: {proc.memory_info().rss / (1024**2):.2f} MB, CMD: {' '.join(proc.cmdline())}"
+    )
+    for child in proc.children(recursive=True):
+        try:
+            mem = child.memory_info().rss / (1024 ** 2)
+            cmdline = " ".join(child.cmdline())
+            LOGGER.info(f"Child PID: {child.pid}, RSS: {mem:.2f} MB, CMD: {cmdline}")
+        except Exception:
+            continue
+
+
 def log_ram_usage() -> float:
     total_rss_mb = get_total_rss_mb()
-    # For informational purposes you can get VMS of main process as before
     process = psutil.Process(os.getpid())
     vms_mb = process.memory_info().vms / (1024 ** 2)  # Virtual Memory Size in MB
     LOGGER.info(f"RAM Usage: Total RSS={total_rss_mb:.2f} MB, Main Process VMS={vms_mb:.2f} MB")
+    log_process_tree_memory()
     return total_rss_mb
-
-
-async def hibernate_or_shutdown_service(service, name: str):
-    """
-    Attempt to hibernate the service to save RAM;
-    if hibernation is not supported or fails, shutdown as fallback.
-    """
-    try:
-        if hasattr(service, "hibernate") and callable(service.hibernate):
-            LOGGER.info(f"Attempting to hibernate {name}...")
-            await service.hibernate()
-            LOGGER.info(f"{name} hibernated successfully.")
-            return
-    except Exception as e:
-        LOGGER.warning(f"Hibernate failed for {name}: {e}")
-
-    # Fallback to shutdown if hibernate unavailable or failed
-    try:
-        if hasattr(service, "shutdown") and callable(service.shutdown):
-            LOGGER.info(f"Attempting to shutdown {name}...")
-            await service.shutdown()
-            LOGGER.info(f"{name} shut down successfully.")
-            return
-    except Exception as e:
-        LOGGER.warning(f"Shutdown failed for {name}: {e}")
-
-    LOGGER.warning(f"No hibernate/shutdown method succeeded for {name}.")
-
-
-async def hibernate_idle_services():
-    """
-    Hibernate or shutdown idle/background services without restarting the entire bot.
-    """
-    LOGGER.info("Hibernating idle services...")
-
-    from .helper.ext_utils.telegraph_helper import telegraph
-    from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
-    from .modules import (
-        initiate_search_tools,
-        get_packages_version,
-        restart_notification,
-    )
-    from .helper.ext_utils.files_utils import clean_all
-
-    # Hibernate or shutdown the JDownloader instance imported above
-    await hibernate_or_shutdown_service(jdownloader, "JDownloader")
-
-    # Hibernate or shutdown other known services
-    await hibernate_or_shutdown_service(telegraph, "Telegraph")
-    await hibernate_or_shutdown_service(rclone_serve_booter, "Rclone Serve")
-
-    # These are regular async calls; add explicit hibernate if supported in those modules
-    await initiate_search_tools()
-    await get_packages_version()
-    await restart_notification()
-    await clean_all()
-
-    LOGGER.info("Idle services hibernated/shut down successfully.")
-
-
-async def periodic_ram_logger(interval: int = 300):
-    """
-    Periodically log RAM usage and hibernate idle services if memory usage exceeds threshold.
-    Runs every `interval` seconds (default 300 seconds = 5 minutes).
-    """
-    while True:
-        rss = log_ram_usage()
-
-        threshold_mb = getattr(Config, "MEMORY_RESTART_THRESHOLD_MB", 100)
-        if threshold_mb is None:
-            LOGGER.error(
-                "Config missing MEMORY_RESTART_THRESHOLD_MB, skipping idle service hibernation check."
-            )
-        else:
-            if rss >= threshold_mb:
-                LOGGER.warning(
-                    f"High RAM usage detected: {rss:.2f} MB >= {threshold_mb} MB. "
-                    "Hibernating idle services."
-                )
-                try:
-                    await hibernate_idle_services()
-                except Exception as e:
-                    LOGGER.error(f"Exception during idle service hibernation: {e}")
-        await asyncio.sleep(interval)
-
-
-# --- Cache improvements for memory management ---
-
-chat_cache = weakref.WeakValueDictionary()
-message_cache = weakref.WeakValueDictionary()
-
-
-def cache_chat(chat):
-    try:
-        chat_cache[chat.id] = chat
-    except Exception as e:
-        LOGGER.warning(f"Failed to cache chat with id {getattr(chat, 'id', None)}: {e}")
-
-
-def cache_message(message):
-    try:
-        message_cache[message.message_id] = message
-    except Exception as e:
-        LOGGER.warning(f"Failed to cache message with id {getattr(message, 'message_id', None)}: {e}")
 
 
 async def main():
@@ -167,7 +73,6 @@ async def main():
     )
 
     await load_settings()
-    log_ram_usage()
 
     def changetz(*args):
         return datetime.now(timezone(Config.TIMEZONE)).timetuple()
@@ -175,27 +80,21 @@ async def main():
     Formatter.converter = changetz
 
     await gather(
-        TgClient.start_bot(),
-        TgClient.start_user(),
-        TgClient.start_helper_bots(),
+        TgClient.start_bot(), TgClient.start_user(), TgClient.start_helper_bots()
     )
-    log_ram_usage()
 
     await gather(load_configurations(), update_variables())
-    log_ram_usage()
 
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
-    log_ram_usage()
-
     await gather(
         update_qb_options(),
         update_aria2_options(),
         update_nzb_options(),
     )
-    log_ram_usage()
 
+    from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph
     from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
@@ -215,10 +114,9 @@ async def main():
         telegraph.create_account(),
         rclone_serve_booter(),
     )
-    log_ram_usage()
 
-    # Start periodic RAM logger with idle service hibernation every 5 minutes
-    asyncio.create_task(periodic_ram_logger(interval=300))  # 300 seconds = 5 minutes
+    # Log memory usage at startup and after initializations to help track usage
+    log_ram_usage()
 
 
 bot_loop.run_until_complete(main())
@@ -243,22 +141,12 @@ from .helper.telegram_helper.message_utils import (
     send_message,
 )
 
-from pyrogram import Client
-
-
-@Client.on_message()
-async def message_handler(client, message):
-    cache_message(message)
-    if message.chat:
-        cache_chat(message.chat)
-    # existing message processing logic
-
 
 @new_task
 async def restart_sessions_confirm(_, query):
     data = query.data.split()
     message = query.message
-    if len(data) > 1 and data[1] == "confirm":
+    if data[1] == "confirm":
         reply_to = message.reply_to_message
         restart_message = await send_message(reply_to, "Restarting Session(s)...")
         await delete_message(message)
