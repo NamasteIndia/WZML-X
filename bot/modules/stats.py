@@ -73,12 +73,19 @@ async def get_stats(event, key="home"):
         swap = swap_memory()
         memory = virtual_memory()
         disk_io = disk_io_counters()
+        # --- RAM/Virtual Memory Integration START ---
+        process = Process()
+        ram_usage = process.memory_info().rss
+        virtual_mem = process.memory_info().vms
+        # --- RAM/Virtual Memory Integration END ---
         msg = f"""⌬ <b><i>BOT STATISTICS :</i></b>
 ┖ <b>Bot Uptime :</b> {get_readable_time(time() - bot_start_time)}
 
 ┎ <b><i>RAM ( MEMORY ) :</i></b>
 ┃ {get_progress_bar_string(memory.percent)} {memory.percent}%
 ┖ <b>U :</b> {get_readable_file_size(memory.used)} | <b>F :</b> {get_readable_file_size(memory.available)} | <b>T :</b> {get_readable_file_size(memory.total)}
+<b>Actual RAM Usage (RSS):</b> {get_readable_file_size(ram_usage)}
+<b>Virtual Memory (VMS):</b> {get_readable_file_size(virtual_mem)}
 
 ┎ <b><i>SWAP MEMORY :</i></b>
 ┃ {get_progress_bar_string(swap.percent)} {swap.percent}%
