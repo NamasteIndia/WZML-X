@@ -16,6 +16,11 @@ from tenacity import (
 from .. import LOGGER, aria2_options
 from .config_manager import Config
 
+import asyncio
+
+async def run_in_batches(tasks, batch_size=10):
+    for i in range(0, len(tasks), batch_size):
+        await gather(*tasks[i:i + batch_size])
 
 def wrap_with_retry(obj, max_retries=3):
     for attr_name in dir(obj):
@@ -34,7 +39,6 @@ def wrap_with_retry(obj, max_retries=3):
             wrapped = retry_policy(attr)
             setattr(obj, attr_name, wrapped)
     return obj
-
 
 class TorrentManager:
     aria2 = None
@@ -87,16 +91,19 @@ class TorrentManager:
             cls.qbittorrent.torrents.delete("all", False),
             cls.aria2.purgeDownloadResult(),
         )
-        downloads = []
         results = await gather(cls.aria2.tellActive(), cls.aria2.tellWaiting(0, 1000))
-        for res in results:
-            downloads.extend(res)
-        tasks = []
-        tasks.extend(
-            cls.aria2.forceRemove(download.get("gid")) for download in downloads
-        )
-        with suppress(Exception):
-            await gather(*tasks)
+        downloads = (download for res in results for download in res)  # generator
+        batch = []
+        batch_size = 10
+        for download in downloads:
+            batch.append(cls.aria2.forceRemove(download.get("gid")))
+            if len(batch) >= batch_size:
+                with suppress(Exception):
+                    await gather(*batch)
+                batch.clear()
+        if batch:
+            with suppress(Exception):
+                await gather(*batch)
 
     @classmethod
     async def overall_speed(cls):
@@ -120,24 +127,27 @@ class TorrentManager:
 
     @classmethod
     async def change_aria2_option(cls, key, value):
-        downloads = []
         results = await gather(cls.aria2.tellActive(), cls.aria2.tellWaiting(0, 1000))
+        batch_size = 10
+        batch = []
         for res in results:
-            downloads.extend(res)
-        tasks = [
-            cls.aria2.changeOption(download.get("gid"), {key: value})
-            for download in downloads
-            if download.get("status", "") != "complete"
-        ]
-        if tasks:
+            for download in res:
+                if download.get("status", "") != "complete":
+                    batch.append(cls.aria2.changeOption(download.get("gid"), {key: value}))
+                    if len(batch) >= batch_size:
+                        try:
+                            await gather(*batch)
+                        except Exception as e:
+                            LOGGER.error(e)
+                        batch.clear()
+        if batch:
             try:
-                await gather(*tasks)
+                await gather(*batch)
             except Exception as e:
                 LOGGER.error(e)
         if key not in ["checksum", "index-out", "out", "pause", "select-file"]:
             await cls.aria2.changeGlobalOption({key: value})
             aria2_options[key] = value
-
 
 def aria2_name(download_info):
     if "bittorrent" in download_info and download_info["bittorrent"].get("info"):
@@ -153,7 +163,6 @@ def aria2_name(download_info):
             return ""
     else:
         return ""
-
 
 def is_metadata(download_info):
     return any(
