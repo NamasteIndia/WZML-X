@@ -301,5 +301,9 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
     buttons.data_button("♻️ Refresh", f"status {sid} ref", position="header")
     button = buttons.build_menu(8)
     msg += f"\n┟ <b>CPU</b> → {cpu_percent()}% | <b>F</b> → {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)} [{round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)}%]"
-    msg += f"\n┖ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
+    ram = virtual_memory()
+    used = ram.used // (1024 ** 2)    # MiB
+    total = ram.total // (1024 ** 2)  # MiB
+    percent = ram.percent
+    msg += f"\n┖ <b>RAM</b> → {used} MiB / {total} MiB ({percent}%) | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
     return msg, button
