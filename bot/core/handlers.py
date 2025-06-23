@@ -166,6 +166,13 @@ def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            jd_mirror,
+            filters=command(BotCommands.JdMirrorCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             nzb_mirror,
             filters=command(BotCommands.NzbMirrorCommand, case_sensitive=True)
             & CustomFilters.authorized,
@@ -182,6 +189,13 @@ def add_handlers():
         MessageHandler(
             qb_leech,
             filters=command(BotCommands.QbLeechCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            jd_leech,
+            filters=command(BotCommands.JdLeechCommand, case_sensitive=True)
             & CustomFilters.authorized,
         )
     )
@@ -362,7 +376,33 @@ def add_handlers():
         def insert_at(d, k, v, i):
             return dict(list(d.items())[:i] + [(k, v)] + list(d.items())[i:])
 
-        # Removed JD related commands insertion here.
+        if Config.JD_EMAIL and Config.JD_PASS:
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "JdMirror",
+                "[link/file] Mirror to Upload Destination using JDownloader",
+                2,
+            )
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "JdLeech",
+                "[link/file] Leech files to Upload to Telegram using JDownloader",
+                6,
+            )
+
+        if len(Config.USENET_SERVERS) != 0:
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "NzbMirror",
+                "[nzb] Mirror to Upload Destination using Sabnzbd",
+                2,
+            )
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "NzbLeech",
+                "[nzb] Leech files to Upload to Telegram using Sabnzbd",
+                6,
+            )
 
         if Config.LOGIN_PASS:
             BOT_COMMANDS = insert_at(
