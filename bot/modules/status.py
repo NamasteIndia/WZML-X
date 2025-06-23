@@ -4,6 +4,15 @@ from asyncio import gather, iscoroutinefunction
 
 from pyrogram.errors import QueryIdInvalid
 
+import psutil
+
+def get_ram_usage():
+    memory = psutil.virtual_memory()
+    used = memory.used // (1024 ** 2)  # in MiB
+    total = memory.total // (1024 ** 2)  # in MiB
+    percent = memory.percent
+    return f"{used} MiB / {total} MiB ({percent}%)"
+
 from .. import (
     task_dict_lock,
     status_dict,
@@ -48,7 +57,7 @@ async def task_status(_, message):
 
 ⌬ <b><u>Bot Stats</u></b>
 ┟ <b>CPU</b> → {cpu_percent()}% | <b>F</b> → {free} [{round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)}%]
-┖ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {currentTime}
+┖ <b>RAM</b> → {get_ram_usage()} | <b>UP</b> → {currentTime}
 """
         reply_message = await send_message(message, msg)
         await auto_delete_message(message, reply_message)
