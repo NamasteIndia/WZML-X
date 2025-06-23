@@ -364,20 +364,6 @@ def add_handlers():
 
         # Removed JD related commands insertion here.
 
-        if len(Config.USENET_SERVERS) != 0:
-            BOT_COMMANDS = insert_at(
-                BOT_COMMANDS,
-                "NzbMirror",
-                "[nzb] Mirror to Upload Destination using Sabnzbd",
-                2,
-            )
-            BOT_COMMANDS = insert_at(
-                BOT_COMMANDS,
-                "NzbLeech",
-                "[nzb] Leech files to Upload to Telegram using Sabnzbd",
-                6,
-            )
-
         if Config.LOGIN_PASS:
             BOT_COMMANDS = insert_at(
                 BOT_COMMANDS, "Login", "[password] Login to Bot", 14
