@@ -3,7 +3,7 @@ from html import escape
 from re import findall
 from time import time
 
-import psutil
+from psutil import cpu_percent, disk_usage, virtual_memory
 
 from ... import (
     DOWNLOAD_DIR,
@@ -18,14 +18,6 @@ from ..telegram_helper.bot_commands import BotCommands
 from ..telegram_helper.button_build import ButtonMaker
 
 SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"]
-
-
-def get_ram_usage():
-    memory = psutil.virtual_memory()
-    used = memory.used // (1024 ** 2)  # in MiB
-    total = memory.total // (1024 ** 2)  # in MiB
-    percent = memory.percent
-    return f"{used}/{total}MiB ({percent}%)"
 
 
 class MirrorStatus:
@@ -270,6 +262,7 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
                     msg += f"\n┠ <b>Seeders</b> → {task.seeders_num()} | <b>Leechers</b> → {task.leechers_num()}"
                 except Exception:
                     pass
+            # TODO: Add Connected Peers
         elif tstatus == MirrorStatus.STATUS_SEED:
             msg += f"\n┠ <b>Size</b> → <i>{task.size()}</i> | <b>Uploaded</b>  → <i>{task.uploaded_bytes()}</i>"
             msg += f"\n┠ <b>Status</b> → <b>{tstatus}</b>"
@@ -281,6 +274,7 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
         msg += f"\n┠ <b>Engine</b> → <i>{task.engine}</i>"
         msg += f"\n┠ <b>In Mode</b> → <i>{task.listener.mode[0]}</i>"
         msg += f"\n┠ <b>Out Mode</b> → <i>{task.listener.mode[1]}</i>"
+        # TODO: Add Bt Sel
         msg += f"\n<b>┖ Stop</b> → <i>/{BotCommands.CancelTaskCommand[1]}_{task.gid()}</i>\n\n"
 
     if len(msg) == 0:
@@ -306,12 +300,6 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
                 buttons.data_button(label, f"status {sid} st {status_value}")
     buttons.data_button("♻️ Refresh", f"status {sid} ref", position="header")
     button = buttons.build_menu(8)
-
-    cpu_pct = psutil.cpu_percent(interval=0.5)
-    disk_stat = psutil.disk_usage(DOWNLOAD_DIR)
-    free_space = get_readable_file_size(disk_stat.free)
-    free_pct = round(100 - disk_stat.percent, 1)
-
-    msg += f"\n┟ <b>CPU</b> → {cpu_pct}% | <b>F</b> → {free_space} [{free_pct}%]"
-    msg += f"\n┖ <b>RAM</b> → {get_ram_usage()} | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
+    msg += f"\n┟ <b>CPU</b> → {cpu_percent()}% | <b>F</b> → {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)} [{round(100 - disk_usage(DOWNLOAD_DIR).percent, 1)}%]"
+    msg += f"\n┖ <b>RAM</b> → {virtual_memory().percent}% | <b>UP</b> → {get_readable_time(time() - bot_start_time)}"
     return msg, button
